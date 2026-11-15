@@ -1,0 +1,30 @@
+name: Publish APK
+
+# Runs after "Build Lead APK" succeeds and puts the APK on a Release page
+on:
+  workflow_run:
+    workflows: ["Build Lead APK"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download the built APKs
+        run: gh run download ${{ github.event.workflow_run.id }} --name lead-apk --dir out
+
+      - name: Publish release
+        run: |
+          APK=$(find out -name '*release*.apk' | head -n 1)
+          if [ -z "$APK" ]; then APK=$(find out -name '*.apk' | head -n 1); fi
+          cp "$APK" lead.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest lead.apk --title "Lead" --notes "Latest build" --target ${{ github.event.workflow_run.head_sha }}
